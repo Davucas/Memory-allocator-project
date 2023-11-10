@@ -62,9 +62,8 @@ int umeminit(size_t size, int allocation_algorithm) {
 	return 0;
 }
 
-void split(node_t *curr, size_t size) {
-	size_t remaining_size = curr->size - size - sizeof(node_t);
-
+void split(node_t *curr, size_t size, size_t remaining_size) {
+	curr->size = size;
 	// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
 	node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
 	new_block->size = remaining_size;
@@ -83,6 +82,7 @@ void *umalloc(size_t size) {
 	case BEST_FIT:
 		node_t *prev_best=NULL;
 		node_t *best_fit = head;
+		// We are looking for the node that has the least remaining size
 		size_t best_size = curr->size - size - sizeof(node_t);
 		while (curr) {
 			// Check if current block has enough space
@@ -114,7 +114,7 @@ void *umalloc(size_t size) {
 			curr = curr->next;
 		}
 
-		split(best_fit, size);
+		split(best_fit, size, best_size);
 		
 		if (prev_best) {
 			prev_best->next = best_fit->next;
@@ -135,11 +135,15 @@ void *umalloc(size_t size) {
 
 				// Setup the new block if there is space left
 				if (remaining_size > sizeof(node_t)) {
+					split(curr, size, remaining_size);
+					
+					/*
 					// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
 					node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
 					new_block->size = remaining_size;
 					new_block->next = curr->next;
 					curr->next = new_block;
+					*/
 				}
 
 				if (prev) {
@@ -165,7 +169,7 @@ void *umalloc(size_t size) {
 }
 
 
-void memdump() {
+void umemdump() {
 	node_t *node = head;
 	int i=0;
 
@@ -174,8 +178,10 @@ void memdump() {
 		void *start = (void *)(node+1);
 		void *end = (void *)((char *)start + size);
 		printf("Node %d\n", i);
+		printf("\t Header address: %p\n", (void *)node);
 		printf("\t Start address: %p\n", start);
 		printf("\t End address: %p\n", end);
+		printf("\t Size (without header): %ld\n", size);
 		i++;
 		node= node->next;
 	}	
@@ -183,13 +189,39 @@ void memdump() {
 }
 
 
+int ufree(void *ptr) {
+	if (ptr == NULL) {
+		return 0;
+	}
+	node_t *node = (node_t *)((char *)ptr - sizeof(node_t));
+
+	if (node < head || head == NULL) {
+		node->next = head;
+		head = node;
+		return 0;
+	}
+
+	node_t *curr = head;
+	node_t *prev = NULL;
+	while (curr) {
+		if (curr > node) {
+			node->next = prev->next;
+			prev->next = node;
+		}
+		prev = curr;
+		curr = curr->next;
+	}
+	return 0;
+}
+
+
 
 // This function would be called by the user's program
 int main() {
 	umeminit(4096, BEST_FIT);
-	memdump();
+	umemdump();
 	int *array = (int *)umalloc(10 * sizeof(int));
-	memdump();
+	umemdump();
 	if (array == NULL) {
 		printf("Memory allocation failed\n");
 		return 1;
@@ -202,10 +234,18 @@ int main() {
 	}
 	char *array2 = (char *) umalloc(3* sizeof(char));
 	array2 ="HEY";
-	memdump();
+	umemdump();
 	
 	double **array3 = (double**)umalloc(5*sizeof(double));
-	memdump();
+	umemdump();
+	
+	ufree(array);
+	umemdump();
 
+
+
+	//free(array);
+	//free(array2);
+	//free(array3);
     return 0;
 }
