@@ -19,8 +19,6 @@ int algo = -1;
 size_t align_to_page(size_t size) {
 	int num_pags = size/getpagesize();
 	if (size%getpagesize() > 0) { num_pags++; }
-	
-	printf("numero de paginas es: %d \n", num_pags);
 	return (size*num_pags);
 }
 
@@ -136,14 +134,6 @@ void *umalloc(size_t size) {
 				// Setup the new block if there is space left
 				if (remaining_size > sizeof(node_t)) {
 					split(curr, size, remaining_size);
-					
-					/*
-					// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
-					node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
-					new_block->size = remaining_size;
-					new_block->next = curr->next;
-					curr->next = new_block;
-					*/
 				}
 
 				if (prev) {
@@ -151,7 +141,6 @@ void *umalloc(size_t size) {
 				} else {
 					head = curr->next;
 				}
-				
 				return (void*)(curr + 1);
 			}
 
@@ -173,6 +162,7 @@ void umemdump() {
 	node_t *node = head;
 	int i=0;
 
+	printf("Head points at: %p\n", (void *)head);
 	while (node) {
 		size_t size = node->size;
 		void *start = (void *)(node+1);
@@ -181,6 +171,7 @@ void umemdump() {
 		printf("\t Header address: %p\n", (void *)node);
 		printf("\t Start address: %p\n", start);
 		printf("\t End address: %p\n", end);
+		printf("\t Next: %p\n", (void *)node->next);
 		printf("\t Size (without header): %ld\n", size);
 		i++;
 		node= node->next;
@@ -194,19 +185,39 @@ int ufree(void *ptr) {
 		return 0;
 	}
 	node_t *node = (node_t *)((char *)ptr - sizeof(node_t));
-
 	if (node < head || head == NULL) {
-		node->next = head;
+		// If node < head then the only possible neighbour free node would be the head
+		if (node->next == head) {
+			//Coalescing node with the head
+			node->size = node->size + head->size + sizeof(node_t);
+			node->next = head->next;
+		}
+		else { node->next = head;}
 		head = node;
 		return 0;
 	}
-
+	
 	node_t *curr = head;
 	node_t *prev = NULL;
 	while (curr) {
 		if (curr > node) {
-			node->next = prev->next;
-			prev->next = node;
+			node_t *prev_neighbour = (node_t *)((char *)prev + sizeof(node_t) + prev->size);
+			// Check if the previous and the next free nodes of node are node's neighbours
+			if (node->next == curr) {
+				//Coalescing node with the next one
+				node->size = node->size + curr->size + sizeof(node_t);
+				node->next = curr->next;
+			}
+
+			if (prev_neighbour == node) {
+				prev->size = prev->size + node->size + sizeof(node_t);
+				prev->next = node->next;
+			}
+
+			if ( (node->next != curr) && (prev_neighbour != node)) {
+				node->next = prev->next;
+				prev->next = node;
+			}
 		}
 		prev = curr;
 		curr = curr->next;
@@ -218,10 +229,22 @@ int ufree(void *ptr) {
 
 // This function would be called by the user's program
 int main() {
-	umeminit(4096, BEST_FIT);
+	umeminit(4096, FIRST_FIT);
+
 	umemdump();
+	char *array2 = (char *) umalloc(3*sizeof(char));
+	*array2 = "Hey";
+	printf("ponter HEY is: %p\n", (void *)array2);
+
+	umemdump();
+
+
+
+
+
 	int *array = (int *)umalloc(10 * sizeof(int));
 	umemdump();
+
 	if (array == NULL) {
 		printf("Memory allocation failed\n");
 		return 1;
@@ -232,17 +255,22 @@ int main() {
 		array[i] = i;
 		printf("Element %d of array: %d, address: %p \n", i, array[i],(void *)&array[i]);
 	}
-	char *array2 = (char *) umalloc(3* sizeof(char));
-	array2 ="HEY";
+
 	umemdump();
 	
 	double **array3 = (double**)umalloc(5*sizeof(double));
+
 	umemdump();
-	
+
+
+
+	printf("FREE\n");
 	ufree(array);
 	umemdump();
-
-
+	ufree(array2);
+	umemdump();
+	ufree(array3);
+	umemdump();
 
 	//free(array);
 	//free(array2);
