@@ -64,7 +64,7 @@ void split(node_t *curr, size_t size, size_t remaining_size) {
 	curr->size = size;
 	// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
 	node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
-	new_block->size = remaining_size;
+	new_block->size = remaining_size - sizeof(node_t);
 	new_block->next = curr->next;
 	curr->next = new_block;
 }
@@ -75,22 +75,24 @@ void *umalloc(size_t size) {
 	size = align_size_to_eight(size);
 	node_t *prev = NULL;
 	node_t *curr = head;
+
 	switch (algo)
 	{
 	case BEST_FIT:
 		node_t *prev_best=NULL;
-		node_t *best_fit = head;
+		node_t *best_fit = NULL;
 		// We are looking for the node that has the least remaining size
-		size_t best_size = curr->size - size - sizeof(node_t);
+		size_t best_size = -1;
+		//curr->size - size;
 		while (curr) {
-			// Check if current block has enough space
-			if (curr->size >= size + sizeof(node_t)) {
+			// Check if current node has enough space
+			if (curr->size >= size) {
 				// Fit found
-				size_t remaining_size = curr->size - size - sizeof(node_t);
+				size_t remaining_size = curr->size - size;
 
 				// Found a perfect fit
 				if (remaining_size == 0) {
-					curr->size = size;
+					//curr->size = size;
 					if (prev) {
 						prev->next = curr->next;
 					} else {
@@ -98,9 +100,9 @@ void *umalloc(size_t size) {
 					}
 					return (void*)(curr + 1);
 				}
-
+				
 				// Found a better fit
-				if (remaining_size < best_size) {
+				if (remaining_size < best_size || best_size == -1) {
 					best_fit = curr;
 					best_size = remaining_size;
 					prev_best = prev;
@@ -112,8 +114,13 @@ void *umalloc(size_t size) {
 			curr = curr->next;
 		}
 
-		split(best_fit, size, best_size);
-		
+		if (best_fit == NULL) { break; }
+
+		// Check if the node is big enough to split it
+		if (best_size > sizeof(node_t)) {
+			split(best_fit, size, best_size);
+		}
+
 		if (prev_best) {
 			prev_best->next = best_fit->next;
 		} else {
@@ -125,13 +132,13 @@ void *umalloc(size_t size) {
 	
 	case FIRST_FIT:
 		while (curr) {
-			// Check if current block has enough space
-			if (curr->size >= size + sizeof(node_t)) {
+			// Check if current node has enough space
+			if (curr->size >= size) {
 				// Fit found, need to split the block
-				size_t remaining_size = curr->size - size - sizeof(node_t);
+				size_t remaining_size = curr->size - size;
 				curr->size = size;
 
-				// Setup the new block if there is space left
+				// Setup the new node if there is space left
 				if (remaining_size > sizeof(node_t)) {
 					split(curr, size, remaining_size);
 				}
@@ -226,54 +233,32 @@ int ufree(void *ptr) {
 }
 
 
-
 // This function would be called by the user's program
 int main() {
-	umeminit(4096, FIRST_FIT);
+	umeminit(4096, BEST_FIT);
+
+	int *array1 = (int *)umalloc(20*sizeof(int));
+
+	double *array2 = (double *)umalloc(3*sizeof(double));
+
+	char *array3 = (char *)umalloc(3*sizeof(char));
+
+	char **array4 = (char **)umalloc(5*sizeof(char)*15);
 
 	umemdump();
-	char *array2 = (char *) umalloc(3*sizeof(char));
-	*array2 = "Hey";
-	printf("ponter HEY is: %p\n", (void *)array2);
-
-	umemdump();
-
-
-
-
-
-	int *array = (int *)umalloc(10 * sizeof(int));
-	umemdump();
-
-	if (array == NULL) {
-		printf("Memory allocation failed\n");
-		return 1;
-	}
-	
-	// The array can now be used
-	for (int i = 0; i < 10; i++) {
-		array[i] = i;
-		printf("Element %d of array: %d, address: %p \n", i, array[i],(void *)&array[i]);
-	}
-
-	umemdump();
-	
-	double **array3 = (double**)umalloc(5*sizeof(double));
-
-	umemdump();
-
-
-
-	printf("FREE\n");
-	ufree(array);
-	umemdump();
-	ufree(array2);
+	ufree(array1);
 	umemdump();
 	ufree(array3);
 	umemdump();
 
-	//free(array);
-	//free(array2);
-	//free(array3);
-    return 0;
+	char *array5 = (char *)umalloc(9*sizeof(char));
+	printf("size of array5 %ld\n", sizeof(array5));
+	umemdump();
+
+
+	array5= "Hey";
+	printf("array5: %s\n", array5);
+
+
+	return 0;
 }
