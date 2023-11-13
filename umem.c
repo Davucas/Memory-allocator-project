@@ -15,11 +15,12 @@ typedef struct  node_t{
 node_t *head = NULL;
 int algo = -1;
 
+
 // Aligns the given size to the page size
 size_t align_to_page(size_t size) {
 	int num_pags = size/getpagesize();
 	if (size%getpagesize() > 0) { num_pags++; }
-	return (size*num_pags);
+	return (getpagesize()*num_pags);
 }
 
 size_t align_size_to_eight(size_t size) {
@@ -34,8 +35,9 @@ int umeminit(size_t size, int allocation_algorithm) {
 	if (algo != -1 || size <= 0) {
 		return -1;
 	}
-	
+	// Align the size to the page size
 	size = align_to_page(size);
+
 	// open the /dev/zero device
 	int fd = open("/dev/zero", O_RDWR);
 	if (fd == -1) {
@@ -43,6 +45,7 @@ int umeminit(size_t size, int allocation_algorithm) {
 		exit(1);
 	}
 
+	// Allocate main chunk of memory
 	head = (node_t *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (head == MAP_FAILED) {
 		perror("mmap failed");
@@ -50,6 +53,7 @@ int umeminit(size_t size, int allocation_algorithm) {
 	}
 	close(fd);
 
+	// Set algorithm
 	algo = allocation_algorithm;
 
 	// Initialize the head of the free list
@@ -70,10 +74,14 @@ void split(node_t *curr, size_t size, size_t remaining_size) {
 
 
 void *umalloc(size_t size) {
-	// The size of the nodes (sizeof(node_t)) will always be aligned because it's a mutiple of 8. It's 16.
+	// Aslign size to 8 bytes
 	size = align_size_to_eight(size);
 	node_t *prev = NULL;
 	node_t *curr = head;
+
+	// These are only used in Next_Fit algorithm
+	static node_t *last_fit = NULL;
+	static node_t *prev_last_fit = NULL;
 
 	switch (algo)
 	{
@@ -98,21 +106,17 @@ void *umalloc(size_t size) {
 					}
 					return (void*)(curr + 1);
 				}
-				
 				// Found a better fit
 				if (remaining_size < best_size || best_size == -1) {
 					best_fit = curr;
 					best_size = remaining_size;
 					prev_best = prev;
 				}
-			
 			}
-
 			prev = curr;
 			curr = curr->next;
 		}
-
-		if (best_fit == NULL) { break; }
+		if (best_fit == NULL) { return NULL; }
 
 		// Check if the node is big enough to split it
 		if (best_size > sizeof(node_t)) {
@@ -128,6 +132,44 @@ void *umalloc(size_t size) {
 		return (void*)(best_fit + 1);
 		break;
 	
+	case NEXT_FIT:
+		if (last_fit) {
+			curr = last_fit;
+		}
+		if (prev_last_fit) {
+			prev = prev_last_fit;
+		}
+
+		while (curr) {
+			// Check if current node has enough space
+			if (curr->size >= size) {
+				// Fit found, need to split the block
+				size_t remaining_size = curr->size - size;
+				curr->size = size;
+
+				prev_last_fit = prev;
+				last_fit = curr->next;
+
+				// Setup the new node if there is space left
+				if (remaining_size > sizeof(node_t)) {
+					split(curr, size, remaining_size);
+				}
+
+				if (prev) {
+					prev->next = curr->next;
+				} else {
+					head = curr->next;
+				}
+
+				return (void*)(curr + 1);
+			}
+			prev = curr;
+			curr = curr->next;
+		}
+		last_fit = NULL;
+		prev_last_fit = NULL;
+		break;
+
 	case FIRST_FIT:
 		while (curr) {
 			// Check if current node has enough space
@@ -148,7 +190,6 @@ void *umalloc(size_t size) {
 				}
 				return (void*)(curr + 1);
 			}
-
 			prev = curr;
 			curr = curr->next;
 		}
@@ -171,15 +212,12 @@ void *umalloc(size_t size) {
 					worst_size = remaining_size;
 					prev_worst = prev;
 				}
-			
 			}
-
 			prev = curr;
 			curr = curr->next;
 		}
-
-		if (worst_fit == NULL) { break; }
-
+		if (worst_fit == NULL) { return NULL; }
+	
 		// Check if the node is big enough to split it
 		if (worst_size > sizeof(node_t)) {
 			split(worst_fit, size, worst_size);
@@ -288,18 +326,37 @@ int ufree(void *ptr) {
 
 // This function would be called by the user's program
 int main() {
-	umeminit(4096, WORST_FIT);
+	umeminit(6832, NEXT_FIT);
 	
-	/*
 	umemdump();
-	int *array = (int *)umalloc(1020*sizeof(int));
+	int *array1 = (int *)umalloc(20*sizeof(int));
 	umemdump();
-	ufree(array);
+	double *array2 = (double *)umalloc(2*sizeof(double));
 	umemdump();
-	int *array2 = (int *)umalloc(20*sizeof(int));
-	*/
+	char *array3 = (char *)umalloc(3*sizeof(char));
+	umemdump();
+	int *array4 = (int *)umalloc(20*sizeof(int));
+	umemdump();
+	int *array5 = (int *)umalloc(20*sizeof(int));
+	umemdump();
+	int *array6 = (int *)umalloc(20*sizeof(int));
+	umemdump();
+	int *array7 = (int *)umalloc(20*sizeof(int));
+	umemdump();
 
+	printf("Free\n");
+	ufree(array2);
+	ufree(array4);
+	ufree(array6);
+	umemdump();
+
+	int *array8 = (int *)umalloc(20*sizeof(int));
+	umemdump();
+	int *array9 = (int *)umalloc(2*sizeof(int));
+	umemdump();
 	
+
+	/*
 	int *array1 = (int *)umalloc(20*sizeof(int));
 
 	double *array2 = (double *)umalloc(3*sizeof(double));
@@ -326,6 +383,6 @@ int main() {
 
 	//array5= "Hey";
 	//printf("array5: %s\n", array5);
-
+	*/
 	return 0;
 }
