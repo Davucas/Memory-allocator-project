@@ -63,18 +63,19 @@ int umeminit(size_t size, int allocation_algorithm) {
 	return 0;
 }
 
-void split(node_t *curr, size_t size, size_t remaining_size) {
+node_t *split(node_t *curr, size_t size, size_t remaining_size) {
 	curr->size = size;
 	// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
 	node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
 	new_block->size = remaining_size - sizeof(node_t);
 	new_block->next = curr->next;
 	curr->next = new_block;
+	return new_block;
 }
 
 
 void *umalloc(size_t size) {
-	// Aslign size to 8 bytes
+	// Align size to 8 bytes
 	size = align_size_to_eight(size);
 	node_t *prev = NULL;
 	node_t *curr = head;
@@ -135,11 +136,11 @@ void *umalloc(size_t size) {
 	case NEXT_FIT:
 		if (last_fit) {
 			curr = last_fit;
-		}
-		if (prev_last_fit) {
+			if (prev_last_fit) {
 			prev = prev_last_fit;
+			}
 		}
-
+		
 		while (curr) {
 			// Check if current node has enough space
 			if (curr->size >= size) {
@@ -149,10 +150,11 @@ void *umalloc(size_t size) {
 
 				prev_last_fit = prev;
 				last_fit = curr->next;
-
+				
 				// Setup the new node if there is space left
 				if (remaining_size > sizeof(node_t)) {
 					split(curr, size, remaining_size);
+					prev_last_fit = curr->next;
 				}
 
 				if (prev) {
@@ -160,7 +162,6 @@ void *umalloc(size_t size) {
 				} else {
 					head = curr->next;
 				}
-
 				return (void*)(curr + 1);
 			}
 			prev = curr;
@@ -320,69 +321,5 @@ int ufree(void *ptr) {
 		head->next = node;
 		node->next = NULL;
 	}
-	return 0;
-}
-
-
-// This function would be called by the user's program
-int main() {
-	umeminit(6832, NEXT_FIT);
-	
-	umemdump();
-	int *array1 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-	double *array2 = (double *)umalloc(2*sizeof(double));
-	umemdump();
-	char *array3 = (char *)umalloc(3*sizeof(char));
-	umemdump();
-	int *array4 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-	int *array5 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-	int *array6 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-	int *array7 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-
-	printf("Free\n");
-	ufree(array2);
-	ufree(array4);
-	ufree(array6);
-	umemdump();
-
-	int *array8 = (int *)umalloc(20*sizeof(int));
-	umemdump();
-	int *array9 = (int *)umalloc(2*sizeof(int));
-	umemdump();
-	
-
-	/*
-	int *array1 = (int *)umalloc(20*sizeof(int));
-
-	double *array2 = (double *)umalloc(3*sizeof(double));
-
-	char *array3 = (char *)umalloc(3*sizeof(char));
-
-	char **array4 = (char **)umalloc(5*sizeof(char)*15);
-
-	//This should make the memory full
-	int *array6 = (int *)umalloc(951*sizeof(int));
-
-	umemdump();
-	ufree(array1);
-	umemdump();
-	printf("free array3\n");
-	ufree(array3);
-	umemdump();
-	ufree(array2);
-	umemdump();
-
-	//char *array5 = (char *)umalloc(3*sizeof(char));
-	//umemdump();
-
-
-	//array5= "Hey";
-	//printf("array5: %s\n", array5);
-	*/
 	return 0;
 }
