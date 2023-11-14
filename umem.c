@@ -23,6 +23,7 @@ size_t align_to_page(size_t size) {
 	return (getpagesize()*num_pags);
 }
 
+// Aligns the size of the allocated block of memory to 8 bytes
 size_t align_size_to_eight(size_t size) {
 	size_t offset = size % 8;
 	if (offset == 0) { return size; }
@@ -63,14 +64,14 @@ int umeminit(size_t size, int allocation_algorithm) {
 	return 0;
 }
 
-node_t *split(node_t *curr, size_t size, size_t remaining_size) {
+void split(node_t *curr, size_t size, size_t remaining_size) {
 	curr->size = size;
 	// using (char*)curr because the char type is 1 byte in size we can perform byte-level arithmetic
 	node_t *new_block = (node_t *)((char *)curr + sizeof(node_t) + size);
 	new_block->size = remaining_size - sizeof(node_t);
 	new_block->next = curr->next;
 	curr->next = new_block;
-	return new_block;
+	//return new_block;
 }
 
 
@@ -150,7 +151,7 @@ void *umalloc(size_t size) {
 
 				prev_last_fit = prev;
 				last_fit = curr->next;
-				
+
 				// Setup the new node if there is space left
 				if (remaining_size > sizeof(node_t)) {
 					split(curr, size, remaining_size);
@@ -272,6 +273,10 @@ int ufree(void *ptr) {
 		return 0;
 	}
 	node_t *node = (node_t *)((char *)ptr - sizeof(node_t));
+
+	// check that it was actually a node and not an invalid memory region
+	if (node->size == 0) { return -1; }
+
 	if (head == NULL) {
 		node->next = NULL;
 		head = node;
@@ -296,16 +301,17 @@ int ufree(void *ptr) {
 			node_t *prev_neighbour = (node_t *)((char *)prev + sizeof(node_t) + prev->size);
 			// Check if the previous and the next free nodes of node are node's neighbours
 			if (node->next == curr) {
-				// Coalescing node with the next one
+				// Coalescing with the next node
 				node->size = node->size + curr->size + sizeof(node_t);
 				node->next = curr->next;
 			}
 
 			if (prev_neighbour == node) {
+				// Coalescing with the previous node
 				prev->size = prev->size + node->size + sizeof(node_t);
 				prev->next = node->next;
 			}
-
+			// No coalescing
 			if ( (node->next != curr) && (prev_neighbour != node)) {
 				node->next = prev->next;
 				prev->next = node;
